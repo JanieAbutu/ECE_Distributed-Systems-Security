@@ -10,18 +10,18 @@ exports.getAllEquipes = async (req, res) => {
 exports.getEquipeById = async (req, res) => {
   try {
     const equipe = await Equipe.findById(req.params.id);
-    if (!equipe) return res.status(404).json({ message: "Team not found" });
+    if (!equipe) return res.status(404).json({ message: "Team not found" }); // If no team is found, return an error
     res.status(200).json(equipe);
   } catch {
-    res.status(400).json({ message: "Invalid ID" });
+    res.status(400).json({ message: "Invalid ID" });                        // Handles invalid or malformed IDs
   }
 };
 
 // Create a new team
 exports.createEquipe = async (req, res) => {
   const { name, country } = req.body;
-  const equipe = new Equipe({ name, country });
-  await equipe.save();
+  const equipe = new Equipe({ name, country });                          // Create a new team object
+  await equipe.save();                                                  // Save the team to the database
   res.status(201).json(equipe);
 };
 
