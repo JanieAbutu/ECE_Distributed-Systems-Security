@@ -1,0 +1,39 @@
+Context Summary
+SmartGrade, an automated essay-grading system, increased efficiency but raised concerns about:
+• Misinterpretation of creative essays (±7% error margin)
+• Underperformance on non-standard English (18% bias)
+• 61% student dissatisfaction
+• A leaked memo showing executives fear transparency may jeopardize contract renewal (60 days away)
+
+Additional emerging issues include: multilingual fairness, pedagogical distortion, vendor lock-in, auditability, and over-reliance on proprietary, opaque AI systems.
+
+
+Transparency: The model must explain grading criteria, highlight detected issues, and justify proposed grades.
+Model Design: Simplify the model to reduce bias and variance; enhance accuracy through larger, diverse training data.
+Ethical Concerns:
+Risk of bias against linguistic minorities.
+Potential academic integrity issues (“teaching to the algorithm”).
+Limited contestability of automated grades.
+Data consent and provenance uncertainties.
+Dependence on proprietary AI may erode student trust.
+
+
+token
+KGAT_8636899d267fc7ed19efd261dc4a7c37
+
+env
+export KAGGLE_API_TOKEN=KGAT_8636899d267fc7ed19efd261dc4a7c37
+
+client
+kaggle competitions list
+
+joabutu
+
+setx KAGGLE_USERNAME "joabutu"
+setx KAGGLE_KEY "KGAT_8636899d267fc7ed19efd261dc4a7c37"
+
+
+
+
+
+

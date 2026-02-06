@@ -1,0 +1,139 @@
+Here’s a structured breakdown grouped into major security domains, each framed as a project you could list on your CV.
+
+1. Security Governance & Risk Management
+Project: "Established Security Governance Framework & Risk Assessment for AI-Enabled Travel Platform"
+
+Developed an information security policy, procedures, and compliance roadmap (ISO 27001 / SOC 2 / GDPR).
+
+Performed threat modeling for AI-specific risks (e.g., prompt injection, model poisoning, data leakage).
+
+Built a risk register and mitigation plan for critical business assets.
+
+Established a security awareness program for developers and staff.
+
+2. Secure Cloud & Infrastructure Hardening
+Project: "Designed and Implemented Secure Azure Cloud Architecture for AI Travel Application"
+
+Hardened Azure Kubernetes Service (AKS), databases, and serverless workloads using CIS Benchmarks.
+
+Configured network segmentation, firewall rules, and private endpoints.
+
+Enabled Azure Defender, Microsoft Sentinel, and Security Center for continuous monitoring.
+
+Implemented Infrastructure-as-Code (IaC) security scans and automated compliance checks.
+
+3. Application & API Security
+Project: "Built Secure SDLC & API Protection for AI-Powered Travel Recommendation Engine"
+
+Integrated SAST, DAST, and SCA into CI/CD pipelines.
+
+Enforced OWASP Top 10 protections in backend and frontend services.
+
+Secured AI model inference APIs against prompt injection and adversarial ML attacks.
+
+Applied JWT/OAuth 2.0-based authentication with role-based access control (RBAC).
+
+4. Data Security & Privacy
+Project: "Implemented Data Privacy, Encryption, and AI Model Security for Travel App"
+
+Applied encryption at rest (Azure Key Vault, customer-managed keys) and in transit (TLS 1.3).
+
+Designed data retention and anonymization workflows in compliance with GDPR/CCPA.
+
+Secured AI training datasets against poisoning and membership inference attacks.
+
+Built automated PII detection and masking pipelines.
+
+5. Identity & Access Management (IAM)
+Project: "Deployed Zero Trust Identity and Access Controls for Startup’s Global Workforce"
+
+Integrated Azure AD with MFA, Conditional Access, and Just-in-Time access provisioning.
+
+Implemented least privilege principles across infrastructure and code repositories.
+
+Applied workload identity federation for CI/CD pipelines.
+
+6. Security Monitoring & Incident Response
+Project: "Built Security Operations and Incident Response Playbooks for AI Travel Platform"
+
+Configured SIEM (Microsoft Sentinel) for log aggregation, anomaly detection, and alerting.
+
+Created incident response runbooks covering AI-specific threats and cloud breaches.
+
+Established regular tabletop exercises and post-incident reviews.
+
+7. Penetration Testing & Red Teaming
+Project: "Conducted Full-Stack Penetration Testing and AI Model Attack Simulations"
+
+Performed internal and external pentests on app, APIs, and infrastructure.
+
+Simulated adversarial attacks on AI models (evasion, extraction).
+
+Delivered remediation roadmap and validated fixes.
+
+8. Business Continuity & Disaster Recovery
+Project: "Developed Resilient Business Continuity & Disaster Recovery Plan for AI Travel Service"
+
+Designed high-availability architecture with geo-redundancy.
+
+Created RTO/RPO-aligned recovery strategies for AI workloads.
+
+Tested failover and backup restoration processes.
+
+
+
+Lead Cybersecurity Initiatives for AI-Enabled Travel Platform
+
+Established a comprehensive security governance framework by creating ISO 27001–aligned policies, conducting AI-specific threat modeling, and maintaining a live risk register, reducing critical risk exposure by 40%.
+
+Designed and implemented secure Azure cloud architecture with hardened AKS clusters, segmented networks, and private endpoints, achieving 100% CIS Benchmark compliance across infrastructure.
+
+Integrated secure SDLC practices into CI/CD pipelines, embedding SAST, DAST, and dependency scanning, reducing high-severity application vulnerabilities by 60% before release.
+
+Protected AI model APIs from adversarial attacks by implementing prompt injection defenses, RBAC, and OAuth 2.0 authentication, ensuring zero unauthorized inference requests in production.
+
+Implemented end-to-end data protection with encryption at rest and in transit, automated PII detection, and GDPR-compliant anonymization workflows, safeguarding sensitive user and travel data.
+
+Deployed Zero Trust IAM architecture with Azure AD MFA, Conditional Access, and just-in-time privilege escalation, cutting excessive admin rights by 75%.
+
+Built cloud-native SOC capabilities with Microsoft Sentinel SIEM, AI-driven anomaly detection, and custom incident response runbooks, reducing mean time to detect (MTTD) by 50%.
+
+Led penetration testing & AI attack simulations across application, APIs, and ML models, identifying and remediating critical security gaps within 2 weeks of discovery.
+
+Developed business continuity and disaster recovery plans with geo-redundant architecture, meeting sub-1-hour RTO/RPO for critical AI workloads.
+
+
+
+Security Portfolio – AI-Enabled Travel Platform
+(Mapped to NIST Cybersecurity Framework)
+
+1. Identify – Governance, Risk & Compliance
+Established an ISO 27001–aligned security governance framework, including AI-specific threat modeling, risk register, and compliance roadmap (GDPR, CCPA, SOC 2).
+
+Led quarterly risk assessments, reducing high-impact AI model and data risks by 40%.
+
+2. Protect – Infrastructure, Applications & Data
+Designed secure Azure cloud architecture with hardened AKS, private endpoints, and network segmentation, achieving 100% CIS Benchmark compliance.
+
+Integrated secure SDLC into CI/CD pipelines with SAST, DAST, and dependency scanning, cutting pre-production critical vulnerabilities by 60%.
+
+Protected AI inference APIs from adversarial attacks with prompt injection defenses, OAuth 2.0, and RBAC controls.
+
+Implemented enterprise-grade encryption, automated PII detection, and GDPR-compliant anonymization, securing sensitive travel and user data.
+
+Deployed Zero Trust IAM with Azure AD MFA, Conditional Access, and just-in-time privilege escalation, reducing excessive admin rights by 75%.
+
+3. Detect – Security Monitoring & Threat Detection
+Built a cloud-native SOC using Microsoft Sentinel, enabling AI-driven anomaly detection and threat correlation.
+
+Reduced mean time to detect (MTTD) security incidents by 50% through proactive log analysis and custom alerting rules.
+
+4. Respond – Incident Response & Playbooks
+Developed incident response runbooks tailored to AI model compromise scenarios, cloud breaches, and API abuse.
+
+Conducted regular tabletop exercises to validate readiness and streamline escalation paths.
+
+5. Recover – Resilience & Business Continuity
+Designed and tested geo-redundant disaster recovery architecture meeting <1-hour RTO/RPO for critical workloads.
+
+Automated failover testing and backup validation for AI datasets and model artifacts.

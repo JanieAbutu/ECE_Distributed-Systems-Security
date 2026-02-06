@@ -1,0 +1,874 @@
+# ecc/curve.py
+
+class Point:
+    """Represents a point on an elliptic curve."""
+    def __init__(self, x, y, curve):
+        self.x = x
+        self.y = y
+        self.curve = curve  # <-- CRITICAL
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, Point) and
+            self.x == other.x and self.y == other.y
+        )
+
+    def __repr__(self):
+        if self.x is None and self.y is None:
+            return "Point(infinity)"
+        return f"Point({self.x}, {self.y})"
+
+    # ----------- Point ADDITION -----------
+    def __add__(self, Q):
+        curve = self.curve
+        p, a = curve.p, curve.a
+
+        # Point at infinity rules
+        if self.x is None:
+            return Q
+        if Q.x is None:
+            return self
+
+        # If P == -Q → infinity
+        if self.x == Q.x and (self.y + Q.y) % p == 0:
+            return curve.O
+
+        # Slope m
+        if self == Q:
+            # Doubling
+            m = (3 * self.x * self.x + a) * pow(2 * self.y, -1, p)
+            m %= p
+        else:
+            # Addition
+            m = (Q.y - self.y) * pow(Q.x - self.x, -1, p)
+            m %= p
+
+        # Result coordinates
+        xr = (m * m - self.x - Q.x) % p
+        yr = (m * (self.x - xr) - self.y) % p
+
+        return Point(xr, yr, curve)
+
+    # ----------- Scalar multiplication (double-and-add) -----------
+    def __rmul__(self, k):
+        return self.__mul__(k)
+
+    def __mul__(self, k):
+        result = self.curve.O
+        addend = self
+
+        while k > 0:
+            if k & 1:
+                result = result + addend
+            addend = addend + addend
+            k >>= 1
+
+        return result
+
+
+class EllipticCurve:
+    """Elliptic curve over finite field: y^2 = x^3 + ax + b (mod p)."""
+    def __init__(self, p, a, b, Gx, Gy, n):
+        self.p = p
+        self.a = a
+        self.b = b
+        self.n = n
+
+        # generator and infinity point
+        self.G = Point(Gx, Gy, self)
+        self.O = Point(None, None, self)
+
+    # ----------- Modular inverse helper -----------
+    def inverse_mod(self, k):
+        """Modular inverse of k modulo p."""
+        if k == 0:
+            raise ZeroDivisionError("Cannot invert 0 in modular arithmetic.")
+        return pow(k, -1, self.p)
+
+    # ----------- Point addition helper -----------
+    def point_add(self, P, Q):
+        """Add two points P and Q on the curve."""
+        return P + Q
+
+    # ----------- Scalar multiplication helper -----------
+    def scalar_mult(self, k, P):
+        """Multiply point P by scalar k using double-and-add."""
+        return k * P
+
+
+# ecc/ecdsa.py
+import hashlib
+from random import randint
+from typing import Tuple, Optional
+
+class ECDSA:
+    """
+    Robust ECDSA implementation compatible with our EllipticCurve and Point.
+    Works for both small toy curves and large curves like secp256k1.
+    """
+
+    def __init__(self, curve, private_key: Optional[int] = None, public_key=None):
+        self.curve = curve
+        self.private_key = private_key
+        self.public_key = public_key
+
+    def _hash_msg(self, msg: str) -> int:
+        """Return SHA-256(msg) reduced modulo curve.n."""
+        z = int.from_bytes(hashlib.sha256(msg.encode()).digest(), 'big')
+        return z % self.curve.n
+
+    def sign(self, msg: str, k: Optional[int] = None) -> Tuple[int, int]:
+        """
+        Produce an ECDSA signature (r, s) for the message `msg`.
+        Optional deterministic k can be supplied for testing.
+        """
+        if self.private_key is None:
+            raise ValueError("Private key not set for signing")
+
+        n = self.curve.n
+        G = self.curve.G
+        d = self.private_key
+        z = self._hash_msg(msg)
+
+        while True:
+            # Random or deterministic k
+            if k is None:
+                k = randint(1, n - 1)
+
+            # Point multiplication mod p
+            P = k * G
+            if P is None or getattr(P, "x", None) is None:
+                if k is not None:
+                    raise ValueError(f"Invalid deterministic k={k}")
+                continue
+
+            r = P.x % n
+            if r == 0:
+                if k is not None:
+                    raise ValueError(f"r=0 for deterministic k={k}")
+                k = None
+                continue
+
+            k_inv = pow(k, -1, n)
+            s = (k_inv * (z + r * d) % n) % n
+            if s == 0:
+                if k is not None:
+                    raise ValueError(f"s=0 for deterministic k={k}")
+                k = None
+                continue
+
+            return (r, s)
+
+    def verify(self, msg: str, sig: Tuple[int, int], Q) -> bool:
+        """
+        Verify ECDSA signature.
+        - sig: (r, s)
+        - Q: public key point
+        Returns True if valid, False otherwise.
+        """
+        r, s = sig
+        n = self.curve.n
+
+        # Check bounds
+        if not (1 <= r < n and 1 <= s < n):
+            return False
+
+        z = self._hash_msg(msg)
+
+        try:
+            s_inv = pow(s, -1, n)
+        except ValueError:
+            return False
+
+        u1 = (z * s_inv) % n
+        u2 = (r * s_inv) % n
+
+        X = u1 * self.curve.G + u2 * Q
+
+        if X is None or getattr(X, "x", None) is None:
+            return False
+
+        return (X.x % n) == r
+
+
+from random import randint
+
+class ElGamalECC:
+    def __init__(self, curve):
+        self.curve = curve
+
+    # encode each character to a number modulo the field prime
+    def _encode(self, msg: str):
+        return [ord(c) % self.curve.p for c in msg]
+
+    # decode list of numbers back to string
+    def _decode(self, m_list):
+        return "".join(chr(m) for m in m_list)
+
+    def encrypt(self, Q, msg: str):
+        p = self.curve.p
+        G = self.curve.G
+        n = self.curve.n
+        m_list = self._encode(msg)
+
+        C1_list = []
+        C2_list = []
+
+        for m in m_list:
+            k = randint(1, n - 1)
+            C1 = k * G
+            S = k * Q
+            C2 = (m + S.x) % p
+            C1_list.append(C1)
+            C2_list.append(C2)
+
+        return C1_list, C2_list
+
+    def decrypt(self, d, cipher):
+        C1_list, C2_list = cipher
+        m_list = []
+
+        for C1, C2 in zip(C1_list, C2_list):
+            S = d * C1
+            m = (C2 - S.x) % self.curve.p
+            m_list.append(m)
+
+        return self._decode(m_list)
+
+
+# ecc/encoder.py
+
+def encode_point(point):
+    """
+    Encode a point (tuple or Point object) into bytes.
+    Format: [2 bytes length | x bytes | y bytes]
+    """
+    if point is None:
+        return b"INF"
+
+    # Accept tuple or Point object
+    if isinstance(point, tuple):
+        x, y = point
+    else:
+        x, y = point.x, point.y
+
+    xb = x.to_bytes((x.bit_length() + 7) // 8, 'big')
+    yb = y.to_bytes((y.bit_length() + 7) // 8, 'big')
+
+    return len(xb).to_bytes(2, 'big') + xb + yb
+
+
+def decode_point(encoded: bytes):
+    """
+    Decode the bytes back to (x, y).
+    This matches the encode_point() format.
+    """
+    if encoded == b"INF":
+        return None
+
+    L = int.from_bytes(encoded[:2], "big")
+    xb = encoded[2:2+L]
+    yb = encoded[2+L:]
+
+    x = int.from_bytes(xb, "big")
+    y = int.from_bytes(yb, "big")
+    return (x, y)
+
+
+#Flow of keys.py:
+#ECCKeyPair(curve) → Initialize key pair object with a specific curve.
+#generate_keys() →
+#Randomly picks private key d ∈ [1, n-1]
+#Computes public key Q = d*G using scalar multiplication from curve.py
+
+# ecc/keys.py
+import random
+from .curve import EllipticCurve
+
+class ECCKeyPair:
+    """Generates and stores an ECC private and public key pair."""
+
+    def __init__(self, curve: EllipticCurve):
+        self.curve = curve
+        self.private_key = None
+        self.public_key = None
+
+    def generate_keys(self):
+        """Generates private and public keys."""
+        self.private_key = random.randrange(1, self.curve.n)
+        self.public_key = self.curve.scalar_mult(self.private_key, self.curve.G)
+        return self.private_key, self.public_key
+
+    def load_private_key(self, private_key: int):
+        """Set an existing private key and compute public key."""
+        self.private_key = private_key
+        self.public_key = self.curve.scalar_mult(self.private_key, self.curve.G)
+        return self.public_key
+
+    def load_public_key(self, public_key):
+        """Set an existing public key (optional)."""
+        self.public_key = public_key
+
+
+#Flow of Data
+#Hash the message using SHA-256 (done in ECDSA module)
+#RFC 6979 HMAC procedure generates deterministic k
+#k is used in signature (r, s) generation
+
+
+# ecc/rfc6979.py
+import hmac
+import hashlib
+
+
+def int2octets(x, rlen):
+    """Convert integer x to rlen-length octet string."""
+    return x.to_bytes(rlen, byteorder='big')
+
+
+def bits2octets(b, qlen, q):
+    """Convert hash to integer -> then to octets modulo q."""
+    z1 = int.from_bytes(b, 'big')
+    z2 = z1 if qlen >= len(b) * 8 else z1 >> (len(b)*8 - qlen)
+    return int2octets(z2 % q, (qlen + 7) // 8)
+
+
+def rfc6979_generate_k(msg_hash, private_key, q):
+    """
+    Deterministic k generation per RFC 6979.
+    msg_hash: bytes
+    private_key: int
+    q: curve order
+    """
+    qlen = q.bit_length()
+    rlen = (qlen + 7) // 8
+
+    x = private_key
+    h1 = msg_hash
+
+    # Step: Convert x and h1 to octets
+    bx = int2octets(x, rlen)
+    bh = bits2octets(h1, qlen, q)
+
+    # Step: Initialize V and K
+    V = b'\x01' * 32
+    K = b'\x00' * 32
+
+    # Step: K = HMAC_K(V || 0x00 || bx || bh)
+    K = hmac.new(K, V + b'\x00' + bx + bh, hashlib.sha256).digest()
+    V = hmac.new(K, V, hashlib.sha256).digest()
+
+    # Step: K = HMAC_K(V || 0x01 || bx || bh)
+    K = hmac.new(K, V + b'\x01' + bx + bh, hashlib.sha256).digest()
+    V = hmac.new(K, V, hashlib.sha256).digest()
+
+    # Loop
+    while True:
+        T = b''
+        while len(T) < rlen:
+            V = hmac.new(K, V, hashlib.sha256).digest()
+            T += V
+
+        k = int.from_bytes(T[:rlen], 'big')
+        if 1 <= k < q:
+            return k  # Valid RFC 6979 nonce
+
+        K = hmac.new(K, V + b'\x00', hashlib.sha256).digest()
+        V = hmac.new(K, V, hashlib.sha256).digest()
+
+
+# ecc/utils.py
+import hashlib
+
+def sha256_int(msg: str) -> int:
+    return int.from_bytes(hashlib.sha256(msg.encode()).digest(), 'big')
+
+# small helper alias
+def sha256_bytes(msg: str) -> bytes:
+    return hashlib.sha256(msg.encode()).digest()
+
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+
+# Setup curve (use same curve you used in the tests)
+curve = EllipticCurve(
+    p=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F,
+    a=0,
+    b=7,
+    Gx=55066263022277343669578718895168534326250603453777594175500187360389116729240,
+    Gy=32670510020758816978083085130507043184471273380659243275938904335757337482424,
+    n=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+)
+
+print("\n=== BANKING TRANSACTION DEMO ===")
+
+# 1. Customer generates keys
+customer_keys = ECCKeyPair(curve)
+private_key, public_key = customer_keys.generate_keys()
+
+ecdsa = ECDSA(curve, private_key=private_key, public_key=public_key)
+
+# 2. Customer creates a transaction message
+transaction = "TRANSFER: ₦2500000 FROM 023XXXX TO 112XXXX"
+
+# 3. Customer signs it
+signature = ecdsa.sign(transaction)
+
+print("\nTransaction:", transaction)
+print("Signature:", signature)
+
+# 4. Bank receives: (message, signature, public_key)
+verified = ecdsa.verify(transaction, signature, public_key)
+print("\nVerification result:", verified)
+
+# 5. ATTACK TEST — attacker modifies the message
+tampered = "TRANSFER: ₦9500000 FROM 023XXXX TO 112XXXX"   # attacker increases amount
+
+print("\nTampered transaction:", tampered)
+verified_tampered = ecdsa.verify(tampered, signature, public_key)
+print("Verification on tampered message:", verified_tampered)
+
+
+##### Interactive_demo in a demo folder
+from simulations.banking_app import BankingApp
+from simulations.replay_attack import replay_attack
+from simulations.forgery_attack import forgery_attack
+from simulations.mitm_attack import mitm_attack
+from simulations.malleability_attack import malleability_attack
+from simulations.weakK_attack import weak_k_attack
+
+import json
+
+bank = BankingApp()
+last_tx = None
+last_signature = None
+
+def menu():
+    print("\n==== DIGITAL BANKING SECURITY DEMO ====")
+    print("Balance:", bank.balance)
+    print("1. Make Transaction")
+    print("2. Verify Last Transaction")
+    print("3. Attack: Replay Transaction")
+    print("4. Attack: Signature Forgery")
+    print("5. Attack: MITM Tampering")
+    print("6. Attack: Signature Malleability")
+    print("7. Attack: Weak-k Exploit Explanation")
+    print("0. Exit")
+    return input("Choose: ")
+
+while True:
+    choice = menu()
+
+    if choice == "1":
+        amt = int(input("Amount to send: "))
+        recip = input("Recipient ID: ")
+
+        tx, sig = bank.create_transaction(amt, recip)
+        if tx is None:
+            print("❌ ERROR:", sig)
+        else:
+            last_tx, last_signature = tx, sig
+            print("\n✔ Transaction Signed")
+            print(json.dumps(tx, indent=4))
+            print("Signature:", sig)
+
+    elif choice == "2":
+        if not last_tx:
+            print("No transaction yet.")
+        else:
+            result = bank.verify_transaction(last_tx, last_signature)
+            print("✔ VALID Signature" if result else "❌ INVALID Signature")
+
+    elif choice == "3":
+        replay_attack(bank, last_tx, last_signature)
+
+    elif choice == "4":
+        forgery_attack(bank)
+
+    elif choice == "5":
+        mitm_attack(bank, last_tx, last_signature)
+
+    elif choice == "6":
+        malleability_attack(bank, last_tx, last_signature)
+
+    elif choice == "7":
+        weak_k_attack()
+
+    elif choice == "0":
+        break
+
+    else:
+        print("Invalid option.")
+
+
+###inside attack folder that is inside backend folder
+
+### files in attack folder
+# forgery.py
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+from random import randint
+from backend.logging_config import logger
+
+
+logger.info("Starting signature forgery attack simulation…")
+
+
+curve = EllipticCurve(
+    p=9739,
+    a=497,
+    b=1768,
+    Gx=1804,
+    Gy=5368,
+    n=9929
+)
+
+
+def run_forgery_attack(log):
+    log("=== SIGNATURE FORGERY ATTEMPT ===")
+    log("Attacker tries random (r, s) pairs...")
+
+    kp = ECCKeyPair(curve)
+    d, Q = kp.generate_keys()
+    ecdsa = ECDSA(curve, private_key=d, public_key=Q)
+
+    msg = "Transfer 5000 USD to Attacker"
+
+    for _ in range(50):
+        r = randint(1, curve.n - 1)
+        s = randint(1, curve.n - 1)
+        if ecdsa.verify(msg, (r, s), Q):
+            forged = f"(r={r}, s={s})"
+            log(f"FORGERY SUCCEEDED — {forged}")
+            return f"Forgery SUCCESS: {forged}"
+
+    log("Forgery FAILED — attacker could NOT generate a valid signature.")
+    return "Forgery FAILED (correct behavior)."
+
+
+if __name__ == "__main__":
+    def cli_log(msg): print(msg)
+    print(run_forgery_attack(cli_log))
+
+# malleability_attack.py
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+from backend.logging_config import logger
+
+logger.info("Starting Signature Malleability Simulation…")
+
+
+curve = EllipticCurve(
+    p=9739, a=497, b=1768,
+    Gx=1804, Gy=5368,
+    n=9929
+)
+
+def run_malleability_attack(log):
+    log("=== SIGNATURE MALLEABILITY ATTACK ===")
+
+    kp = ECCKeyPair(curve)
+    d, Q = kp.generate_keys()
+
+    ecdsa = ECDSA(curve, private_key=d, public_key=Q)
+
+    msg = "Release 2000 USD"
+    r, s = ecdsa.sign(msg)
+
+    log(f"Original signature: (r={r}, s={s})")
+
+    # Malleability: attacker computes s' = n - s
+    s_prime = (curve.n - s) % curve.n
+    forged_sig = (r, s_prime)
+
+    log(f"Forged malleable signature: (r={r}, s'={s_prime})")
+
+    valid = ecdsa.verify(msg, forged_sig, Q)
+
+    if valid:
+        log("Malleability attack SUCCEEDED — alternative signature also valid!")
+        return "Malleability SUCCESS (ECDSA is malleable by design)."
+
+    log("Malleability attack FAILED (unexpected).")
+    return "Malleability FAILED."
+
+
+if __name__ == "__main__":
+    def cli_log(msg): print(msg)
+    print(run_malleability_attack(cli_log))
+
+
+# mitm_tampering.py
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+from backend.logging_config import logger
+
+logger.info("Starting MITM Tampering Simulation…")
+
+curve = EllipticCurve(
+    p=9739, a=497, b=1768,
+    Gx=1804, Gy=5368,
+    n=9929
+)
+
+def run_mitm_tampering(log):
+    log("=== MITM TAMPERING ATTACK ===")
+
+    kp = ECCKeyPair(curve)
+    d, Q = kp.generate_keys()
+
+    ecdsa = ECDSA(curve, private_key=d, public_key=Q)
+
+    original_msg = "Pay 300 USD to Alice"
+    tampered_msg = "Pay 300 USD to Mallory"
+
+    sig = ecdsa.sign(original_msg)
+
+    log(f"Original message: {original_msg}")
+    log(f"Tampered message: {tampered_msg}")
+    log(f"Signature: {sig}")
+
+    log("MITM sends the tampered message with original signature...")
+
+    verified = ecdsa.verify(tampered_msg, sig, Q)
+
+    if verified:
+        log("MITM attack SUCCEEDED — tampered message accepted!")
+        return "MITM Attack SUCCESS (system vulnerable!)"
+
+    log("MITM attack FAILED — signature did NOT match tampered message.")
+    return "MITM Attack FAILED (correct behavior)."
+
+
+if __name__ == "__main__":
+    def cli_log(msg): print(msg)
+    print(run_mitm_tampering(cli_log))
+
+# replay_attack.py
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+from backend.logging_config import logger
+
+logger.info("Starting Replay Attack Simulation…")
+
+
+# Teaching curve
+curve = EllipticCurve(
+    p=9739, a=497, b=1768,
+    Gx=1804, Gy=5368,
+    n=9929
+)
+
+
+def run_replay_attack(log):
+    """
+    Attacker reuses a previously valid signature on a new transaction.
+    """
+    log("=== REPLAY ATTACK ===")
+
+    # Honest user generates keys
+    kp = ECCKeyPair(curve)
+    d, Q = kp.generate_keys()
+
+    ecdsa = ECDSA(curve, private_key=d, public_key=Q)
+
+    # Original payment
+    msg1 = "Pay 200 USD to Vendor A"
+    r1, s1 = ecdsa.sign(msg1)
+
+    log(f"Original transaction signed: {msg1}")
+    log(f"Signature = (r={r1}, s={s1})")
+
+    # Attacker replays same signature
+    msg2 = "Pay 200 USD to Attacker"
+
+    log("Attacker attempts to reuse signature on new message!")
+    valid = ecdsa.verify(msg2, (r1, s1), Q)
+
+    if valid:
+        log("Replay attack SUCCEEDED — signature wrongly verified!")
+        return "Replay Attack SUCCESS (system vulnerable!)"
+
+    log("Replay attack FAILED — signature bound to original message.")
+    return "Replay Attack FAILED (correct behavior)."
+
+
+if __name__ == "__main__":
+    def cli_log(msg): print(msg)
+    print(run_replay_attack(cli_log))
+
+
+# weak_k_attack.py
+
+from ecc.curve import EllipticCurve
+from ecc.keys import ECCKeyPair
+from ecc.ecdsa import ECDSA
+from backend.logging_config import logger
+
+logger.info("Starting Weak‑k Attack Simulation…")
+
+
+curve = EllipticCurve(
+    p=9739, a=497, b=1768,
+    Gx=1804, Gy=5368,
+    n=9929
+)
+
+
+def run_weak_k_attack(log):
+    """
+    If k is too small or predictable, private key can be recovered.
+    We simulate attacker forcing k = 1.
+    """
+    log("=== WEAK k ATTACK ===")
+    log("Attacker forces weak k = 1...")
+
+    kp = ECCKeyPair(curve)
+    d, Q = kp.generate_keys()
+
+    ecdsa = ECDSA(curve, private_key=d, public_key=Q)
+
+    msg = "Authorize payment of 1000 USD"
+    r, s = ecdsa.sign(msg, k=1)
+
+    log(f"Signature with weak k: r={r}, s={s}")
+
+    log("Mathematical fact: with k=1, attacker computes:")
+    recovered_d = ((s * 1) - ecdsa.hash_message(msg)) * pow(r, -1, curve.n)
+    recovered_d %= curve.n
+
+    log(f"Recovered private key = {recovered_d}")
+    log(f"Actual private key    = {d}")
+
+    if recovered_d == d:
+        log("Weak‑k attack SUCCEEDED — private key fully recovered!")
+        return "Weak‑k Attack SUCCESS (system vulnerable!)"
+
+    log("Weak‑k attack FAILED (unexpected).")
+    return "Weak‑k Attack FAILED."
+
+
+if __name__ == "__main__":
+    def cli_log(msg): print(msg)
+    print(run_weak_k_attack(cli_log))
+
+
+import logging
+import os
+
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_FILE = os.path.join(LOG_DIR, "attack_simulation.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger("ECDSA-Attack-Demo")
+
+
+####### inside backend folder
+#initial main.py
+
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from logging_config import logger
+from attacks.replay import run_replay_attack
+from attacks.weak_k import run_weak_k_attack
+from attacks.forgery import run_forgery_attack
+from attacks.mitm import run_mitm_attack
+from attacks.malleability import run_malleability_attack
+
+app = FastAPI()
+
+# Allow your React app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Store connected UI clients
+connected_clients = []
+
+
+# ------------ REAL‑TIME LOG STREAMING ------------
+@app.websocket("/ws/logs")
+async def websocket_logs(ws: WebSocket):
+    await ws.accept()
+    connected_clients.append(ws)
+    try:
+        while True:
+            pass  # idle; messages are pushed externally
+    except:
+        connected_clients.remove(ws)
+
+
+# Helper: push logs to clients
+async def broadcast(message: str):
+    for ws in connected_clients:
+        await ws.send_text(message)
+
+
+# Override logger to also push to WebSocket
+def push_log(msg: str):
+    logger.info(msg)
+    import asyncio
+    asyncio.create_task(broadcast(msg))
+
+
+# ------------ API ROUTES ------------
+@app.get("/attack/replay")
+async def replay():
+    push_log("Running replay attack…")
+    result = run_replay_attack(push_log)
+    return {"result": result}
+
+
+@app.get("/attack/weak-k")
+async def weak_k():
+    push_log("Running weak‑k attack…")
+    result = run_weak_k_attack(push_log)
+    return {"result": result}
+
+
+@app.get("/attack/forgery")
+async def forgery():
+    push_log("Running signature forgery attempt…")
+    result = run_forgery_attack(push_log)
+    return {"result": result}
+
+
+@app.get("/attack/mitm")
+async def mitm():
+    push_log("Running MITM tampering attack…")
+    result = run_mitm_attack(push_log)
+    return {"result": result}
+
+
+@app.get("/attack/malleability")
+async def malleability():
+    push_log("Running signature malleability demo…")
+    result = run_malleability_attack(push_log)
+    return {"result": result}
+
+
+
+
